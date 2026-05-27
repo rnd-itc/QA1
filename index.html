@@ -24,9 +24,15 @@
 <!-- QR Code generator -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
-<!-- Recharts for charts -->
-<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"></script>
+<!-- Recharts for charts (primary: jsdelivr, fallback: unpkg) -->
+<script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"></script>
+<script>
+if (typeof Recharts === 'undefined') {
+  document.write('<scr' + 'ipt src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"><\/scr' + 'ipt>');
+  document.write('<scr' + 'ipt src="https://unpkg.com/recharts@2.12.7/umd/Recharts.min.js"><\/scr' + 'ipt>');
+}
+</script>
 
 <!-- Firebase Realtime Database -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -748,10 +754,11 @@ window.addEventListener('error', function(ev) {
  * ========================================================================== */
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
-const _R = (typeof Recharts !== 'undefined') ? Recharts : {};
+const _R = (typeof Recharts !== 'undefined') ? (Recharts.default || Recharts) : {};
 const { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
         Legend, ResponsiveContainer, LineChart, Line, ScatterChart, Scatter,
         AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } = _R;
+if (typeof Recharts !== 'undefined') console.log('[Recharts] components loaded:', !!ResponsiveContainer, !!BarChart, !!LineChart);
 
 /* ===========================================================================
  * §1  CONSTANTS
@@ -1004,6 +1011,39 @@ const stats = {
   max(arr) { const a = arr.filter(x => typeof x === 'number'); return a.length ? Math.max(...a) : 0; },
   count(arr) { return arr.filter(x => x !== null && x !== undefined && x !== '').length; },
 };
+const { mean, median, std, min, max } = stats;
+
+// Firebase may convert arrays to objects — normalize back
+const fbArr = (v) => {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const keys = Object.keys(v);
+    if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) return Object.values(v);
+  }
+  return v;
+};
+
+// Error boundary for chart components
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return React.createElement('div', { className: 'banner-warn' },
+        React.createElement('div', { className: 'text-2xl' }, '⚠️'),
+        React.createElement('div', null,
+          React.createElement('div', { className: 'font-display font-bold mb-1' }, 'שגיאה בהצגת הנתונים'),
+          React.createElement('div', { className: 'text-sm' }, this.state.error?.message || 'שגיאה לא ידועה'),
+          React.createElement('button', {
+            className: 'btn btn-ghost btn-sm mt-2',
+            onClick: () => this.setState({ error: null })
+          }, 'נסה שוב')
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // Field validation
 const validateField = (field, value) => {
@@ -3176,14 +3216,14 @@ function EvalDashboard({ form, responses, series, evals, allResponses, onBack, o
         </div>
       )}
 
-      {activeTab === 'summary' && responseCount > 0 && <DashSummary form={form} responses={responses} allFields={allFields} />}
-      {activeTab === 'quant' && responseCount > 0 && <DashQuantitative numericFields={numericFields} responses={responses} />}
-      {activeTab === 'charts' && responseCount > 0 && <DashCharts categoricalFields={categoricalFields} multiFields={multiFields} numericFields={numericFields} responses={responses} />}
-      {activeTab === 'qualitative' && responseCount > 0 && <DashQualitative textFields={textFields} responses={responses} />}
-      {activeTab === 'compare' && responseCount > 0 && <DashCompare numericFields={numericFields} categoricalFields={categoricalFields} responses={responses} />}
-      {activeTab === 'crosstab' && responseCount > 0 && <DashCrosstab categoricalFields={categoricalFields} responses={responses} />}
-      {activeTab === 'trends' && responseCount > 0 && <DashTrends responses={responses} />}
-      {activeTab === 'respondents' && responseCount > 0 && <DashRespondents form={form} responses={responses} allFields={allFields} />}
+      {activeTab === 'summary' && responseCount > 0 && <ErrorBoundary><DashSummary form={form} responses={responses} allFields={allFields} /></ErrorBoundary>}
+      {activeTab === 'quant' && responseCount > 0 && <ErrorBoundary><DashQuantitative numericFields={numericFields} responses={responses} /></ErrorBoundary>}
+      {activeTab === 'charts' && responseCount > 0 && <ErrorBoundary><DashCharts categoricalFields={categoricalFields} multiFields={multiFields} numericFields={numericFields} responses={responses} /></ErrorBoundary>}
+      {activeTab === 'qualitative' && responseCount > 0 && <ErrorBoundary><DashQualitative textFields={textFields} responses={responses} /></ErrorBoundary>}
+      {activeTab === 'compare' && responseCount > 0 && <ErrorBoundary><DashCompare numericFields={numericFields} categoricalFields={categoricalFields} responses={responses} /></ErrorBoundary>}
+      {activeTab === 'crosstab' && responseCount > 0 && <ErrorBoundary><DashCrosstab categoricalFields={categoricalFields} responses={responses} /></ErrorBoundary>}
+      {activeTab === 'trends' && responseCount > 0 && <ErrorBoundary><DashTrends responses={responses} /></ErrorBoundary>}
+      {activeTab === 'respondents' && responseCount > 0 && <ErrorBoundary><DashRespondents form={form} responses={responses} allFields={allFields} /></ErrorBoundary>}
       {activeTab === 'serieslink' && hasSeriesLink && <DashSeriesLink form={form} series={formSeriesLinks} evals={evals || []} allResponses={allResponses || []} />}
       {activeTab === 'export' && <DashExport form={form} responses={responses} onExport={onExport} />}
     </div>
@@ -3272,6 +3312,7 @@ function DashQuantitative({ numericFields, responses }) {
 function DashCharts({ categoricalFields, multiFields, numericFields, responses }) {
   const [chartType, setChartType] = useState('bar');
   const allChartable = [...categoricalFields, ...multiFields, ...numericFields];
+  if (!ResponsiveContainer || !BarChart) return <div className="banner-warn"><div className="text-2xl">⚠️</div><div>ספריית Recharts לא נטענה כראוי. נסי לרענן את הדף.</div></div>;
   if (allChartable.length === 0) return <div className="banner-info"><div>אין שאלות הניתנות להמחשה גרפית.</div></div>;
   return (
     <div className="space-y-4">
@@ -3288,7 +3329,7 @@ function DashCharts({ categoricalFields, multiFields, numericFields, responses }
             data = Object.entries(counts).map(([name,value]) => ({ name, value }));
           } else if (f.type === 'multi') {
             const counts = {};
-            responses.forEach(r => (r.answers?.[f.id] || []).forEach(v => counts[v] = (counts[v]||0)+1));
+            responses.forEach(r => (fbArr(r.answers?.[f.id]) || []).forEach(v => counts[v] = (counts[v]||0)+1));
             data = Object.entries(counts).map(([name,value]) => ({ name, value }));
           } else {
             const counts = responses.map(r => r.answers?.[f.id]).filter(v => typeof v === 'number').reduce((a,v) => (a[v]=(a[v]||0)+1, a), {});
@@ -3446,6 +3487,7 @@ function DashCrosstab({ categoricalFields, responses }) {
 }
 
 function DashTrends({ responses }) {
+  if (!ResponsiveContainer || !LineChart) return <div className="banner-warn"><div className="text-2xl">⚠️</div><div>ספריית Recharts לא נטענה כראוי. נסי לרענן את הדף.</div></div>;
   const byDate = {};
   responses.forEach(r => {
     const d = (r.submittedAt || '').slice(0, 10);
